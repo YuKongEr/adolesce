@@ -1,4 +1,5 @@
 用于记录我的学习过程
+
 # netty
 > 时间 2018年8月22日14:41:11
 
@@ -38,3 +39,16 @@
    
    与服务端相同，一个`ChannelHandler`处理客户端业务逻辑
    ，一个引导客户端(`BootStrap`)。
+   
+   ## 1.3 Netty的组件与设计
+   > 2018年8月28日17:22:49
+   - Channel --- Socket
+   - EventLoop --- 控制流、多线程处理、并发;
+   - ChannelFuture --- 异步通知
+   
+   ### 1.3.1 Channel 接口
+   在java网络编程中，其基本构造的是Socket，Netty的Channel提供的
+   api大大的降低了直接使用Socket类的复杂性。
+   
+   ### 1.3.2 EventLoop 接口
+   
