@@ -112,6 +112,7 @@ public class SimpleHttpServer {
             }
         }
 
+
         private static void close(Closeable... closeables)  {
             if (closeables != null) {
                 for (Closeable closeable:closeables) {
