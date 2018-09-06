@@ -1,6 +1,5 @@
 package com.yukong.lock;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +30,9 @@ public class MutexTest {
         for (int i = 0; i < 1000; i++) {
             executorService.execute(() -> {
                 numLock.lock();
+                numLock.lock();
                 num++;
+                numLock.unlock();
                 numLock.unlock();
             });
         }

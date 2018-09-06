@@ -16,10 +16,23 @@ public class Mutex implements Lock {
     static class Sync extends AbstractQueuedSynchronizer {
         @Override
         protected boolean tryAcquire(int arg) {
-            // 获取锁，cas设置state为1
-            if (compareAndSetState(0 , 1)) {
-                // 设置占用排它锁的线程是当前线程
-                setExclusiveOwnerThread(Thread.currentThread());
+            Thread thread = Thread.currentThread();
+            int c = getState();
+            if(c == 0) {
+                // 获取锁，cas设置state为1
+                if (!hasQueuedPredecessors() && compareAndSetState(0, 1)) {
+                    // 设置占用排它锁的线程是当前线程
+                    setExclusiveOwnerThread(Thread.currentThread());
+                    return true;
+                }
+            }
+            // 可重入锁的实现
+            if (thread == getExclusiveOwnerThread()) {
+                int nextc = c + arg;
+                if (nextc < 0) {
+                    throw new Error("max lock not expect ");
+                }
+                compareAndSetState(c, nextc);
                 return true;
             }
             return false;
@@ -27,15 +40,23 @@ public class Mutex implements Lock {
 
         @Override
         protected boolean tryRelease(int arg) {
+
             // 如果没有被占用
             if (getState() == 0) {
                 throw new IllegalMonitorStateException();
             }
-            // 设置state为0
-            setState(0);
-            // 取消排它锁的线程
-            setExclusiveOwnerThread(null);
-            return true;
+            if (Thread.currentThread() != getExclusiveOwnerThread()) {
+                throw new IllegalMonitorStateException();
+            }
+            boolean isFree = false;
+            int next = getState() - arg;
+            if (next == 0) {
+                // 取消排它锁的线程
+                setExclusiveOwnerThread(null);
+                isFree = true;
+            }
+            setState(next);
+            return isFree;
         }
 
         @Override
