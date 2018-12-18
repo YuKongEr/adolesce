@@ -1,4 +1,4 @@
-package com.yukong.netty.chapter2;
+package com.yukong.netty.decoder;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;

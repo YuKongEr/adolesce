@@ -1,4 +1,4 @@
-package com.yukong.netty.chapter1.socket;
+package com.yukong.netty.sample.socket;
 
 import java.io.BufferedReader;
 import java.io.IOException;

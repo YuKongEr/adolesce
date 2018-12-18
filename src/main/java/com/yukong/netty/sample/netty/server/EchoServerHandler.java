@@ -1,4 +1,4 @@
-package com.yukong.netty.chapter1.netty.server;
+package com.yukong.netty.sample.netty.server;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

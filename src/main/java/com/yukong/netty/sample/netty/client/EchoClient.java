@@ -1,4 +1,4 @@
-package com.yukong.netty.chapter1.netty.client;
+package com.yukong.netty.sample.netty.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
