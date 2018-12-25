@@ -29,12 +29,24 @@
 
 
 
+
 ### Adapter(适配)
 
 `Adapter`模式的主人公，使用`Adapter`角色的方法来满足`Target`角色的需求，这就是`Adapter`模式的木器，也就是`Adapter`角色的作用，在我们实际例子中`PrintBanner`扮演此角色，在电脑示例中，AC适配器扮演此角色。
 
+## 思路要点
+
+### 什么时候用`Adapter`模式
+     很多时候，我们并非从零开会编程，经常会用到现有的类，特别是当现有的类已经被充分测试过了
+     Bug很少，而且以及被用于其他软件中，我们更愿意将这些类作为组件重复利用。
+     `Adapter`模式会对现有的类进行适配，生成新的类，通过该模式可以很方便的创建我们需要的方法群。
+
+
+
+在类适配器模式，`Adapter`角色通过继承来使用`Adaptee`角色
 ![extend](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/designpatterns/adapter/readme.assets/image-20181225145359358-5720839.png)
 
-在类适配器模式，`Adapter`角色通过继承来使用`Adaptee`角色，在对象适配器模式中，`Adapter`角色通过委托来使用`Adaptee`角色
+
+在对象适配器模式中，`Adapter`角色通过委托来使用`Adaptee`角色
 
 ![entrust](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/designpatterns/adapter/readme.assets/image-20181225150114013-5721274.png)
