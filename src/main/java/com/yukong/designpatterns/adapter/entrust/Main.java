@@ -14,9 +14,6 @@ public class Main {
         Print print = new PrintBanner(new Banner("hello"));
         print.printStrong();
         print.printWeak();
-
-        HashMap<String, String> hashMap = new HashMap<>();
-        hashMap.put("zz", "zz");
     }
 
 }
