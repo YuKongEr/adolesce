@@ -38,4 +38,4 @@ hasNext方法用于判断是否还有下一个元素，next方法用于获取下
 
 
 
-
+![image-20181225140411103](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/designpatterns/iterator/readme.assets/image-20181225140411103-5717851.png)
