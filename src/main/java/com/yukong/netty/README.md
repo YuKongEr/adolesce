@@ -671,7 +671,7 @@ public class NettyNioClient {
 
 ## 3.1 ByteBuf
 
-优点
+###3.1.1优点
 
 - 可以被用户自定义的缓冲区类型扩展
 - 通过内置的复合缓冲区类型实现了透明的零拷贝
@@ -682,5 +682,281 @@ public class NettyNioClient {
 - 支持引用计数
 - 支持池化
 
-实现
+### 3.1.2实现
+内部维护了两个索引:一个用于读取，一个用于写入。
+当你从 ByteBuf 读取时， 它的 readerIndex 将会被递增已经被读取的字节数。
+同样地，当你写入 ByteBuf 时，它的 writerIndex 也会被递增。
+
+```html
+ * <pre>
+ *      +-------------------+------------------+------------------+
+ *      | discardable bytes |  readable bytes  |  writable bytes  |
+ *      |                   |     (CONTENT)    |                  |
+ *      +-------------------+------------------+------------------+
+ *      |                   |                  |                  |
+ *      0      <=      readerIndex   <=   writerIndex    <=    capacity
+ * </pre>
+```
+
+
+    名称以 read 或者 write 开头的 ByteBuf 方法，将会推进其对应的索引，而名称以 set 或 者 get 开头的操作则不会。后面的这些方法将在作为一个参数传入的一个相对索引上执行操作。 可以指定 ByteBuf 的最大容量。试图移动写索引(即 writerIndex)超过这个值将会触
+    发一个异常1。(默认的限制是 Integer.MAX_VALUE。)
+
+### 3.1.3类型
+
+####1、堆缓冲区
+
+​        最常见的就是堆缓冲区，将数据存储在jvm的堆空间中，这种模式被称为支撑数组(backing array)它能在没有使用池化的情况下提供快速的分配和释放。非常适合于有遗留的数据需要处理的情况。 
+
+```java
+ByteBuf heapBuf = .....;
+// 检查ByteBuf是否有支撑数组 
+if (heapBuf.hasArray()) {
+    // 如果有 则获取其支撑数组
+    byte[] array = heapBuf.array();
+}
+```
+
+####2、直接缓冲区
+
+  直接缓冲区是另外一种 ByteBuf 模式。我们期望用于对象创建的内存分配永远都来自于堆 中，但这并不是必须的——NIO 在 JDK 1.4 中引入的 ByteBuffer 类允许 JVM 实现通过本地调 用来分配内存。这主要是为了避免在每次调用本地 I/O 操作之前(或者之后)将缓冲区的内容复 制到一个中间缓冲区(或者从中间缓冲区把内容复制到缓冲区)。 
+
+ByteBuffer的Javadoc1明确指出:“直接缓冲区的内容将驻留在常规的会被垃圾回收的堆 之外。”这也就解释了为何直接缓冲区对于网络数据传输是理想的选择。如果你的数据包含在一 个在堆上分配的缓冲区中，那么事实上，在通过套接字发送它之前，JVM将会在内部把你的缓冲 区复制到一个直接缓冲区中。 
+
+直接缓冲区的主要缺点是，相对于基于堆的缓冲区，它们的分配和释放都较为昂贵。如果你 正在处理遗留代码，你也可能会遇到另外一个缺点:因为数据不是在堆上，所以你不得不进行一 次复制 
+
+```java
+ ByteBuf directBuf = ...;
+ // 检查 ByteBuf 是否由数 组支撑。如果不是，则 这是一个直接缓冲区
+ if (!directBuf.hasArray()) {
+    //获取可读 字节数
+    int length = directBuf.readableBytes();
+    // 分配一个新的数组来保存 具有该长度的字节数据
+    byte[] array = new byte[length]; 
+    // 将字节复制到该数组
+    directBuf.getBytes(directBuf.readerIndex(), array);
+ }
+```
+
+#### 3、复合缓冲区
+
+第三种也是最后一种模式使用的是复合缓冲区，它为多个 ByteBuf 提供一个聚合视图。在 这里你可以根据需要添加或者删除 ByteBuf 实例，这是一个 JDK 的 ByteBuffer 实现完全缺 失的特性。 
+
+Netty 通过一个 ByteBuf 子类——CompositeByteBuf——实现了这个模式，它提供了一 个将多个缓冲区表示为单个合并缓冲区的虚拟表示 
+
+> CompositeByteBuf中的ByteBuf实例可能同时包含直接内存分配和非直接内存分配。
+> 如果其中只有一个实例，那么对 CompositeByteBuf 上的 hasArray()方法的调用将返回该组
+> 件上的 hasArray()方法的值;否则它将返回 false。
+
+为了举例说明，让我们考虑一下一个由两部分——头部和主体——组成的将通过 HTTP 协议
+传输的消息。这两部分由应用程序的不同模块产生，将会在消息被发送的时候组装。该应用程序
+可以选择为多个消息重用相同的消息主体。当这种情况发生时，对于每个消息都将会创建一个新
+的头部。
+
+```java
+CompositeByteBuf messageBuf = Unpooled.compositeBuffer(); ByteBuf headerBuf = ...; // can be backing or direct 
+ByteBuf bodyBuf = ...; // can be backing or direct 
+// 将 ByteBuf 实例追加 到 CompositeByteBuf
+messageBuf.addComponents(headerBuf, bodyBuf);
+//  删除位于索引位置为 0 第一个组件)的 ByteBuf
+messageBuf.removeComponent(0); // remove the header
+for (ByteBuf buf : messageBuf) {
+	System.out.println(buf.toString()); 
+}
+```
+
+### 3.1.4 字节操作
+
+#### 1、随机访问索引
+
+与java字节数组一样，`ByteBuf`开始的索引是0，结束的索引是`capacity()-1` 
+
+```java
+ByteBuf buffer = ...;
+for (int i = 0; i < buffer.capacity(); i++) {
+        byte b = buffer.getByte(i);
+System.out.println((char)b); }
+```
+
+需要注意的是，使用索引访问`ByteBuf`的操作并不会改变`writeIndex\readIndex`，如果有需要可以通过`readIndex(index)`和`writeIndex(index)`来手动改变两者。
+
+#### 2、可丢弃字节
+
+通过`discardReadBytes()`丢弃已读数据，扩大可以写数据容量，，但是请注意，这将极有可能会导致内存复制，因为可读字节必须被移动到缓冲区的开始位置。我们建议只在有真正需要的时候才这样做，例如，当内存非常宝贵的时候。
+
+
+
+#### 3、可读字节
+
+默认`ByteBuf`的readIndex索引为0，调用read或skip开头的方法都会让readIndex增加已读字节数。
+
+如果被调用的方法需要一个 ByteBuf 参数作为写入的目标，并且没有指定目标索引参数， 那么该目标缓冲区的 writerIndex 也将被增加，例如: 
+
+```java
+    readBytes(ByteBuf dest);
+```
+
+如果尝试在缓冲区的可读字节数已经耗尽时从中读取数据，那么将会引发一个` IndexOutOfBoundsException。` 我们可以通过`isReadable()`方法来判断是否还有可读的字节。
+
+```java
+ByteBuf buf = ...;
+while(buf.isReadable()) {
+    System.out.println(buffer.readByte());
+}
+```
+
+#### 4、可写数据
+
+默认`ByteBuf`的writeIndex索引为0，调用write开头的方法都会让writeIndex增加已写数据字节数。
+
+如果被调用的方法需要一个ByteBuf参数作为读取的目标，并且没有指定目标索引的参数，那么该目标缓冲区的readIndex也将被增加，例如：
+
+```java
+writeBytes(ByteBuf dest); 
+```
+
+如果尝试往目标写入超过目标容量的数据，将会引发一个IndexOutOfBoundException。
+
+```java
+ByteBuf buffer = ...;
+while (buffer.writableBytes() >= 4) {
+	buffer.writeInt(random.nextInt()); 
+}
+```
+
+#### 5、索引管理
+
+- 可以通过`markReadIndex()`标记readIndex,通过`resetReadIndex()`来复原readIndex，这与`InputStream`的mark与reset方法一致。同理也有`markWriteIndex()`与`resetWriteIndex()`
+- 可以通过`readIndex()`与`writeIndex()`来移动索引试图将任何一个索引设置到一个无效的位置都将导致一个 IndexOutOfBoundsException。
+- 可以通过调用`clear()`方法来清楚`readIndex`与`writeIndex`使其都为0，但是这并不会清楚内容。
+
+#### 6、查找操作
+
+在`ByteBuf`中有多种可以用来确定指定值的索引的方法。最简单的是使用indexOf()方法。 较复杂的查找可以通过那些需要一个`ByteBufProcessor`作为参数的方法达成。这个接口只定 义了一个方法: 
+
+```
+    boolean process(byte value)
+```
+
+它将检查输入值是否是正在查找的值。 ByteBufProcessor针对一些常见的值定义了许多便利的方法。假设你的应用程序需要和 所谓的包含有以NULL结尾的内容的Flash套接字集成。调用 forEachByte(ByteBufProcessor.FIND_NUL) 
+
+将简单高效地消费该 Flash 数据，因为在处理期间只会执行较少的边界检查。 
+
+使用 ByteBufProcessor 来寻找\r
+
+```java
+ByteBuf buffer = ...;
+int index = buffer.forEachByte(ByteBufProcessor.FIND_CR);
+```
+
+#### 7、派生缓冲区
+
+派生缓冲区为 ByteBuf 提供了以专门的方式来呈现其内容的视图。这类视图是通过以下方 法被创建的: 
+
+- duplicate();
+
+- slice(); 
+- slice(int, int)
+- Unpooled.unmodifiableBuffer(...);
+- order(ByteOrder);
+- readSlice(int)。
+
+这些方法都会返回一个新的`ByteBuf`实例，它有自己的`readIndex writeIndex` 但是需要注意的是它们共享同一个字节数组，那么意味着它的内容，它对应的源实例也会被修改。
+
+> ByteBuf 复制 如果需要一个现有缓冲区的真实副本，请使用 copy()或者 copy(int, int)方
+> 法。不同于派生缓冲区，由这个调用所返回的 ByteBuf 拥有独立的数据副本。
+
+**切片**
+
+```java
+
+Charset utf8 = Charset.forName("UTF-8");
+
+ByteBuf buf = Unpooled.copiedBuffer("Netty in Action rocks!", utf8); 
+//  创建该 ByteBuf 从索 引 0 开始到索引 15 结束的一个新切片
+ByteBuf sliced = buf.slice(0, 15); 
+//  将打印 “Netty in Action”
+System.out.println(sliced.toString(utf8));
+// 修改索引0处的字节
+buf.setByte(0, (byte)'J');
+//将会成功，因为数据是共享的，对其中 一个所做的更改对另外一个也是可见的
+assert buf.getByte(0) == sliced.getByte(0);
+```
+
+
+
+**副本**
+
+```java
+Charset utf8 = Charset.forName("UTF-8");
+ByteBuf buf = Unpooled.copiedBuffer("Netty in Action rocks!", utf8); 
+// 创建该 ByteBuf 从索 引 0 开始到索引 15 结束的分段的副本
+ByteBuf copy = buf.copy(0, 15); 
+//  将打印 “Netty in Action”
+System.out.println(copy.toString(utf8));
+// 修改索引0处的字节
+buf.setByte(0, (byte) 'J'); 
+// 将会成功，因为数据不是共享的
+assert buf.getByte(0) != copy.getByte(0);
+```
+
+除了修改原始 ByteBuf 的切片或者副本的效果以外，这两种场景是相同的。只要有可能，
+使用 slice()方法来避免复制内存的开销。
+
+
+
+#### 8、读\写操作
+
+前面我们提到，读写操作有两类。
+
+- `get()`和`set()`操作，从指定索引开始，不会改变索引值。
+- `read()`和`write()`操作，从指定所以开始，并且会根据已经访问过的字节数进行调整。
+
+![image-20181227113428425](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113428425-5881668.png)
+
+
+
+![image-20181227113446947](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113446947-5881687.png)
+
+![image-20181227113602971](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113602971-5881763.png)
+
+![image-20181227113613455](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113613455-5881773.png)
+
+
+
+![image-20181227113642382](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113642382-5881802.png)
+
+![image-20181227113650274](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227113650274-5881810.png)
+
+###  3.1.5 ByteBuf 分配 
+
+#### 1、按需分配
+
+为了降低分配和释放内存的消耗，`Netty`通过`ByteBufAllocator`实现了`ByteBuf`的池化，它可以用来分配我们所描述过的任意类型的 ByteBuf 实例。使用池化是特定于应用程序的决定，其并不会以任何方式改变 ByteBuf API(的语义)。
+
+![image-20181227114924403](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227114924403-5882564.png)
+
+我们可以通过`Channel`或者绑定到`ChannelHandler`的`ChannelHandlerContext`获取到`ByteBufAllocator`的实例的引用。
+
+```java
+Channel channel = ...;
+ByteBufAllocator allocator = channel.alloc(); ....
+ChannelHandlerContext ctx = ...; 
+ByteBufAllocator allocator2 = ctx.alloc();
+```
+
+
+
+在`netty`中有两种`ByteBufAllocator`的实现
+
+- `PooledByteBufAllocator` 提供池化的`ByteBuf`实例对象以提供性能与减少内存碎片。
+- `UnpooledByteBufAllocator` 提供不池化的`ByteBuf`对象，每次调用都会返回一个新的实例。
+
+#### 2、Unpooled 缓冲区
+
+可能某些情况下，你未能获取一个到 ByteBufAllocator 的引用。对于这种情况，Netty 提
+供了一个简单的称为 Unpooled 的工具类，它提供了静态的辅助方法来创建未池化的 ByteBuf
+实例。
+
+![image-20181227134933861](/Users/yukong/Documents/ideaProjects/adolesce/src/main/java/com/yukong/netty/README.assets/image-20181227134933861-5889773.png)
 
