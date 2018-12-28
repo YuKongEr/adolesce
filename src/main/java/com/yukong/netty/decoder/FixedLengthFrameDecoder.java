@@ -4,6 +4,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.List;
 
 /**
@@ -27,4 +29,16 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
             list.add(buf);
         }
     }
+
+
+    private String a = "a";
+
+    public static void main(String[] args) throws MalformedURLException {
+        FixedLengthFrameDecoder decoder  = new FixedLengthFrameDecoder(1);
+        System.out.println(decoder.a);
+        URL url = new URL("http://www.abc.com");
+    }
+
 }
+
+
