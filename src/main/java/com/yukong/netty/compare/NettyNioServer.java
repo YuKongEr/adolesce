@@ -22,7 +22,7 @@ public class NettyNioServer {
         final ByteBuf buf = Unpooled.unmodifiableBuffer(Unpooled.copiedBuffer("Hi\n".getBytes()));
         EventLoopGroup group = new NioEventLoopGroup();
         ServerBootstrap serverBootstrap = new ServerBootstrap();
-        serverBootstrap.group(group)
+        serverBootstrap.group(group,group)
                 .channel(NioServerSocketChannel.class)
                 .localAddress(new InetSocketAddress(7070))
                 .childHandler(new ChannelInitializer<SocketChannel>() {

@@ -24,7 +24,7 @@ public class EchoServer {
     }
 
     public static void main(String[] args) throws Exception {
-        new EchoServer(8899).start();
+        new EchoServer(6789).start();
     }
 
     public void start() throws Exception{
